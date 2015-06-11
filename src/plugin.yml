@@ -1,0 +1,8 @@
+name: "SprintingDead"
+version: 2.0
+main: com.tavalon.plugins.SprintingDead.Main
+author: joazlazer
+description: The mini game plugin for the Sprinting Dead.
+commands:
+    sprintdead:
+        description: The main hub command for all of the Sprinting Dead's features.
