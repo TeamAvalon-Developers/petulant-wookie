@@ -1,12 +1,14 @@
 package com.tavalon.plugins.SprintingDead;
 
-import com.tavalon.plugins.SprintingDead.listeners.ItemInteractListener;
-import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
-import org.bukkit.Location;
+import com.tavalon.plugins.SprintingDead.listeners.ServerTickListener;
+import com.tavalon.plugins.SprintingDead.util.ParticleEffect;
+import com.tavalon.plugins.SprintingDead.util.ReflectionUtils;
+import org.bukkit.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.craftbukkit.v1_8_R1.CraftWorld;
 import org.bukkit.entity.Player;
+import org.bukkit.material.MaterialData;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -15,19 +17,75 @@ import java.util.ArrayList;
 
 public class Main extends JavaPlugin {
     public static Main plugin;
-    private ArrayList<Chest> randomChests;
+    public ArrayList<Chest> randomChests;
+
+    public void regenerateChest(Chest c) {
+        Main.makeChestEffect((c.l));
+        c.l.getWorld().getBlockAt(c.l).setType(Material.TRAPPED_CHEST);
+        c.time = -1;
+    }
+
+    public Chest getChestAt(Location loc) {
+        Chest c = new Chest();
+        boolean found = false;
+        for (Chest l : randomChests) {
+            if (loc.getBlockX() == l.l.getBlockX() && loc.getBlockY() == l.l.getBlockY() && loc.getBlockZ() == l.l.getBlockZ()) {
+                c = l;
+                found = true;
+            }
+        }
+
+        if(found) return c;
+        else return null;
+    }
+
+    public boolean isChestAt(Location loc) {
+        boolean found = false;
+        for (Chest l : randomChests) {
+            if (loc.getBlockX() == l.l.getBlockX() && loc.getBlockY() == l.l.getBlockY() && loc.getBlockZ() == l.l.getBlockZ()) {
+                found = true;
+            }
+        }
+
+        return found;
+    }
+
+    public static void makeChestEffect(Location loc) {
+        for(int i = 0; i < 50; i++) {
+            CraftWorld world = (CraftWorld) loc.getWorld();
+            try {
+                World.Spigot spigot = (CraftWorld.Spigot) ReflectionUtils.getValue(world, true, "spigot");
+                spigot.playEffect(loc.clone().add(0.5f, 1f, 0.5f), Effect.TILE_BREAK, 11, 1, 0.0F, 0.0F, 0.0F, 1.0F, 1, 64);
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            } catch (NoSuchFieldException e) {
+                e.printStackTrace();
+            }
+        }
+
+        loc.getWorld().playSound(loc, Sound.DIG_STONE, 0.5f, 0.75f);
+    }
 
     public static class Chest {
         public Location l;
         public int time;
+        public int level;
 
         public Chest(Location l) {
             this.l = l;
             time = 0;
+            level = 1;
+        }
+
+        public Chest(Location l, int level) {
+            this.l = l;
+            time = 0;
+            this.level = level;
         }
 
         public Chest() {
-
+            time = 0;
+            level = 1;
         }
     }
 
@@ -41,7 +99,8 @@ public class Main extends JavaPlugin {
 
     private void registerListeners() {
         PluginManager l = Bukkit.getServer().getPluginManager();
-        l.registerEvents(new ItemInteractListener(), this);
+        l.registerEvents(new RandomChestManager(), this);
+        new ServerTickListener(this);
     }
 
     @Override
@@ -65,8 +124,14 @@ public class Main extends JavaPlugin {
                             Player p = (Player) s;
                             Location loc = p.getLocation();
                             if (!containsLocation(randomChests, loc.clone())) {
-                                randomChests.add(new Chest(loc.clone()));
-                                s.sendMessage(ChatColor.GREEN + "Successfully added a random chest at " + ChatColor.BLUE + "X: " + loc.getBlockX() + " Y: " + loc.getBlockY() + " Z: " + loc.getBlockZ() + ChatColor.GREEN + ".");
+                                if(args.length == 3) {
+                                    randomChests.add(new Chest(loc.clone(), Integer.valueOf(args[2])));
+                                    s.sendMessage(ChatColor.GREEN + "Successfully added a " + ChatColor.BLUE + "Lvl. " + Integer.valueOf(args[2]) + ChatColor.GREEN + " random chest at " + ChatColor.BLUE + "X: " + loc.getBlockX() + " Y: " + loc.getBlockY() + " Z: " + loc.getBlockZ() + ChatColor.GREEN + ".");
+                                } else {
+                                    randomChests.add(new Chest(loc.clone()));
+                                    s.sendMessage(ChatColor.GREEN + "Successfully added a random chest at " + ChatColor.BLUE + "X: " + loc.getBlockX() + " Y: " + loc.getBlockY() + " Z: " + loc.getBlockZ() + ChatColor.GREEN + ".");
+                                }
+
                             } else {
                                 s.sendMessage(ChatColor.RED + "A random chest already exists at " + ChatColor.BLUE + "X: " + loc.getBlockX() + " Y: " + loc.getBlockY() + " Z: " + loc.getBlockZ() + ChatColor.RED + "!");
                             }
@@ -117,6 +182,44 @@ public class Main extends JavaPlugin {
                     } else if(args[1].equalsIgnoreCase("save")) {
                         saveDataToFile();
                         s.sendMessage(ChatColor.GREEN + "Saved chest data to file.");
+                    } else if(args[1].equalsIgnoreCase("regen")) {
+                        if (s instanceof Player) {
+                            Player p = (Player) s;
+                            Location loc = p.getLocation();
+                            if(isChestAt(loc)) {
+                                Chest c = getChestAt(loc);
+                                if(loc.getWorld().getBlockAt(loc).getType() == Material.TRAPPED_CHEST) {
+                                    s.sendMessage(ChatColor.RED + "A random chest already exists at " + ChatColor.BLUE + "X: " + loc.getBlockX() + " Y: " + loc.getBlockY() + " Z: " + loc.getBlockZ() + ChatColor.RED + "!");
+                                } else {
+                                    regenerateChest(c);
+                                    s.sendMessage(ChatColor.GREEN + "Successfully regenerated the random chest at " + ChatColor.BLUE + "X: " + c.l.getBlockX() + " Y: " + c.l.getBlockY() + " Z: " + c.l.getBlockZ() + ChatColor.GREEN + ".");
+                                }
+                            } else
+                                s.sendMessage(ChatColor.RED + "No random chest was found at " + ChatColor.BLUE + "X: " + loc.getBlockX() + " Y: " + loc.getBlockY() + " Z: " + loc.getBlockZ() + ChatColor.RED + "!");
+                        } else sendConsoleError(s);
+                    } else if(args[1].equalsIgnoreCase("regenall")) {
+                        s.sendMessage(ChatColor.GOLD + "Start of regenerating chests: {");
+                        int counter = 0;
+                        for(Chest c : randomChests) {
+                            if(c.l.getWorld().getBlockAt(c.l).getType() == Material.TRAPPED_CHEST) {
+                                s.sendMessage(ChatColor.RED + "A random chest already exists at " + ChatColor.BLUE + "X: " + c.l.getBlockX() + " Y: " + c.l.getBlockY() + " Z: " + c.l.getBlockZ() + ChatColor.RED + "!");
+                            } else {
+                                regenerateChest(c);
+                                counter++;
+                                s.sendMessage(ChatColor.GREEN + "Successfully regenerated the random chest at " + ChatColor.BLUE + "X: " + c.l.getBlockX() + " Y: " + c.l.getBlockY() + " Z: " + c.l.getBlockZ() + ChatColor.GREEN + ".");
+                            }
+                        }
+                        s.sendMessage(ChatColor.GOLD + "} End of regenerating chests;" + ChatColor.GREEN + " Successfully regenerated " + counter + " chests.");
+                    } else if(args[1].equalsIgnoreCase("info")) {
+                        if (s instanceof Player) {
+                            Player p = (Player) s;
+                            Location loc = p.getLocation();
+                            if(isChestAt(loc)) {
+                                Chest c = getChestAt(loc);
+                                s.sendMessage(ChatColor.GOLD + "Chest info for chest at " + ChatColor.BLUE + "X: " + loc.getBlockX() + " Y: " + loc.getBlockY() + " Z: " + loc.getBlockZ() + ChatColor.GOLD + ": " + ChatColor.BLUE + "Level: " + c.level + " Time: " + c.time );
+                            } else
+                                s.sendMessage(ChatColor.RED + "No random chest was found at " + ChatColor.BLUE + "X: " + loc.getBlockX() + " Y: " + loc.getBlockY() + " Z: " + loc.getBlockZ() + ChatColor.RED + "!");
+                        } else sendConsoleError(s);
                     }
                 }
                 return true;
@@ -161,7 +264,7 @@ public class Main extends JavaPlugin {
 
     public void displayCommandHelp(CommandSender s) {
         s.sendMessage(ChatColor.GRAY + "--------------- " + ChatColor.GOLD + "The Sprinting Dead" + ChatColor.GRAY + " -----------------");
-        cInfo(s, "chest", "<add/remove/respawn/list/load/save>", "c", "Modifying the random chests that exist in the world.");
+        cInfo(s, "chest", "<add/remove/regen/list/load/save/regenall/info> [arg[1]=\"add\" ? level]", "c", "Modifying the random chests that exist in the world.");
     }
 
     public void cInfo(CommandSender s, String label, String args, String aliases, String description) {
@@ -187,11 +290,13 @@ public class Main extends JavaPlugin {
                     int x = Integer.valueOf(line.substring(line.indexOf('X') + 1, line.indexOf('Y')));
                     int y = Integer.valueOf(line.substring(line.indexOf('Y') + 1, line.indexOf('Z')));
                     int z = Integer.valueOf(line.substring(line.indexOf('Z') + 1, line.indexOf('W')));
-                    String worldName = line.substring(line.indexOf('W') + 1);
+                    String worldName = line.substring(line.indexOf('W') + 1, line.indexOf('L'));
+                    int level = Integer.valueOf(line.substring(line.indexOf("L") + 1));
 
                     if(Bukkit.getWorld(worldName) != null) {
                         Chest c = new Chest(new Location(Bukkit.getWorld(worldName), x, y, z));
                         c.time = timer;
+                        c.level = level;
                         randomChests.add(c);
                     }
                     line = br.readLine();
@@ -231,7 +336,7 @@ public class Main extends JavaPlugin {
         PrintWriter pw = new PrintWriter(fw);
 
         for(Chest c : randomChests) {
-            pw.println(c.time + "X" + c.l.getBlockX() + "Y" + c.l.getBlockY() + "Z" + c.l.getBlockZ() + "W" + c.l.getWorld().getName());
+            pw.println(c.time + "X" + c.l.getBlockX() + "Y" + c.l.getBlockY() + "Z" + c.l.getBlockZ() + "W" + c.l.getWorld().getName() + "L" + c.level);
         }
 
         pw.close();

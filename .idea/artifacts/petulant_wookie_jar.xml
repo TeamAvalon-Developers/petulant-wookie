@@ -3,7 +3,6 @@
     <output-path>$PROJECT_DIR$/../../../testserver/plugins</output-path>
     <root id="archive" name="petulant-wookie.jar">
       <element id="module-output" name="petulant-wookie" />
-      <element id="extracted-dir" path="$PROJECT_DIR$/../../../jar/craftbukkit.jar" path-in-jar="/" />
       <element id="file-copy" path="$PROJECT_DIR$/../../../testserver/plugins/plugin.yml" />
     </root>
   </artifact>
